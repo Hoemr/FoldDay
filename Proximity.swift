@@ -4,7 +4,6 @@ import Combine
 import CoreBluetooth
 import IOBluetooth
 import IOKit.pwr_mgt
-import LocalAuthentication
 import OSLog
 import Security
 
@@ -139,7 +138,7 @@ final class ProximityController: NSObject, ObservableObject, CBCentralManagerDel
 
     @objc func refreshPermissions() {
         accessibilityAllowed = AXIsProcessTrusted() && CGPreflightPostEventAccess()
-        hasCredential = UnlockCredential.read() != nil
+        hasCredential = UnlockCredential.exists()
     }
 
     func requestAccessibility() {
@@ -168,14 +167,14 @@ final class ProximityController: NSObject, ObservableObject, CBCentralManagerDel
         defer { editingPassword = false }
 
         let field = NSSecureTextField(frame: NSRect(x: 0, y: 0, width: 270, height: 24))
-        field.placeholderString = "当前 Mac 账户的登录密码"
+        field.placeholderString = tr("当前 Mac 账户的登录密码")
         let alert = NSAlert()
-        alert.messageText = hasCredential ? "更改自动解锁密码" : "设置自动解锁密码"
-        alert.informativeText = "折昼将密码保存在本机钥匙串，并在设备返回时用它解锁当前会话。"
+        alert.messageText = tr(hasCredential ? "更改自动解锁密码" : "设置自动解锁密码")
+        alert.informativeText = tr("折昼将密码保存在本机钥匙串，并在设备返回时用它解锁当前会话。")
         alert.accessoryView = field
-        alert.addButton(withTitle: "存入钥匙串")
-        alert.addButton(withTitle: "取消")
-        if hasCredential { alert.addButton(withTitle: "删除已存密码") }
+        alert.addButton(withTitle: tr("存入钥匙串"))
+        alert.addButton(withTitle: tr("取消"))
+        if hasCredential { alert.addButton(withTitle: tr("删除已存密码")) }
         alert.window.initialFirstResponder = field
         let choice = alert.runModal()
         defer { field.stringValue = "" }
@@ -452,7 +451,7 @@ final class ProximityController: NSObject, ObservableObject, CBCentralManagerDel
                   AXIsProcessTrusted(), CGPreflightPostEventAccess() else { return }
             guard let secret = UnlockCredential.read(),
                   let password = String(data: secret, encoding: .utf8), !password.isEmpty else {
-                self.hasCredential = false
+                self.error = "无法读取钥匙串中的解锁密码。请在设置中重新保存。"
                 return
             }
             guard ScreenSession.isLocked == true else { return }
@@ -461,7 +460,7 @@ final class ProximityController: NSObject, ObservableObject, CBCentralManagerDel
         }
     }
 
-    private func refreshNames() {
+    func refreshNames() {
         let paired = IOBluetoothDevice.pairedDevices() as? [IOBluetoothDevice] ?? []
         let labels = profile.devices.enumerated().map { index, id in
             let pair = paired.first { device in
@@ -470,7 +469,7 @@ final class ProximityController: NSObject, ObservableObject, CBCentralManagerDel
             }
             return ProximityDevice(
                 id: id,
-                name: profile.labels?[id] ?? pair?.name ?? names[id] ?? "蓝牙设备 \(index + 1)",
+                name: profile.labels?[id] ?? pair?.name ?? names[id] ?? tr("蓝牙设备 %@", String(index + 1)),
                 rssi: evidence[id]?.filteredRSSI
             )
         }
@@ -517,16 +516,17 @@ final class ProximityController: NSObject, ObservableObject, CBCentralManagerDel
 }
 
 private enum UnlockCredential {
+    static func exists() -> Bool {
+        FoldDayReadKeychainWithoutPrompt(identity as CFDictionary, nil) == errSecSuccess
+    }
+
     static func read() -> Data? {
         var query = identity
         query[kSecReturnData as String] = true
         query[kSecMatchLimit as String] = kSecMatchLimitOne
-        let context = LAContext()
-        context.interactionNotAllowed = true
-        query[kSecUseAuthenticationContext as String] = context
-        var item: CFTypeRef?
-        guard SecItemCopyMatching(query as CFDictionary, &item) == errSecSuccess,
-              let data = item as? Data, !data.isEmpty else { return nil }
+        var item: Unmanaged<CFTypeRef>?
+        guard FoldDayReadKeychainWithoutPrompt(query as CFDictionary, &item) == errSecSuccess,
+              let data = item?.takeRetainedValue() as? Data, !data.isEmpty else { return nil }
         return data
     }
 

@@ -1,0 +1,2 @@
+"CFBundleDisplayName" = "FoldDay";
+"NSBluetoothAlwaysUsageDescription" = "FoldDay scans for nearby Bluetooth LE devices and uses the signal from your selected devices to detect when you leave or return.";

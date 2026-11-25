@@ -4,7 +4,7 @@
 
 折昼是一款 macOS 菜单栏工具，面向长时间任务和 Computer Use。开盖时，也可以用手机或其他蓝牙设备在离开时锁屏、返回时解锁。
 
-[构建与安装](#安装) · [快速上手](#快速上手) · [English](README.md)
+[安装](#安装) · [快速上手](#快速上手) · [English](README.md)
 
 <img src="docs/settings.png" alt="折昼的合盖保活和蓝牙锁屏设置，显示电池选项及各设备的蓝牙信号" width="880">
 
@@ -18,7 +18,18 @@
 
 ## 安装
 
-需要 **macOS 14 或更新版本**和 Apple Command Line Tools。
+需要 **macOS 14 或更新版本**。发布包同时支持 Apple 芯片与 Intel。
+
+```sh
+brew install --cask hoemr/tap/foldday
+```
+
+也可以从 [GitHub Releases](https://github.com/Hoemr/FoldDay/releases/latest) 下载 `FoldDay.app.zip`，将解压后的应用移到「应用程序」。发布包已签名，尚未获得 Apple 公证，macOS 可能要求在首次启动时确认。[Apple 首次启动说明](https://support.apple.com/zh-cn/102445)
+
+<details>
+<summary>从源码构建</summary>
+
+安装 Apple Command Line Tools 后运行：
 
 ```sh
 git clone https://github.com/Hoemr/FoldDay.git
@@ -26,7 +37,11 @@ cd FoldDay
 zsh build.sh "$PWD/dist/FoldDay.app"
 ```
 
-将 `dist/FoldDay.app` 移到「应用程序」。启动后，点击菜单栏图标并打开「折昼 设置…」。
+将 `dist/FoldDay.app` 移到「应用程序」。
+
+</details>
+
+启动后，从菜单栏打开「折昼 设置…」。「界面语言」可选跟随系统、English 或简体中文。
 
 ## 快速上手
 
@@ -56,7 +71,7 @@ zsh build.sh "$PWD/dist/FoldDay.app"
 log show --last 15m --style compact --predicate 'subsystem == "local.lidawake"'
 ```
 
-卸载时关闭「登录后自动启动」，如已授权电源组件则点击「移除电源组件…」，随后退出应用并将它移到废纸篓。如需删除已保存的解锁密码，在「钥匙串访问」中删除服务为 `local.lidawake.proximity` 的 FoldDay 条目。
+卸载时关闭「登录后自动启动」，如已授权电源组件则点击「移除电源组件…」，随后退出应用。通过 Homebrew 安装的版本可用 `brew uninstall --cask hoemr/tap/foldday` 卸载，也可以手动把应用移到废纸篓。如需删除已保存的解锁密码，在「钥匙串访问」中删除服务为 `local.lidawake.proximity` 的 FoldDay 条目。
 
 重复构建时，可使用 `FOLDDAY_SIGNING_IDENTITY` 指定本机签名证书的 SHA-1 指纹，并用 `FOLDDAY_SIGNING_KEYCHAIN` 指定钥匙串。沿用签名身份可保留以该身份识别的授权。
 

@@ -5,7 +5,7 @@ import OSLog
 import ServiceManagement
 import SwiftUI
 
-private let appName = "折昼"
+private var appName: String { tr("折昼") }
 
 struct Options: Codable, Equatable {
     var keepAwake = false
@@ -225,8 +225,8 @@ private struct SettingsHeader<Accessory: View>: View {
                 .background(.tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 11))
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 3) {
-                Text(title).font(.system(size: 24, weight: .semibold)).accessibilityAddTraits(.isHeader)
-                Text(status).foregroundStyle(.secondary)
+                Text(tr(title)).font(.system(size: 24, weight: .semibold)).accessibilityAddTraits(.isHeader)
+                Text(tr(status)).foregroundStyle(.secondary)
             }
             Spacer(minLength: 10)
             accessory
@@ -253,9 +253,9 @@ private struct SettingsRow<Control: View>: View {
     var body: some View {
         HStack(spacing: 9) {
             VStack(alignment: .leading, spacing: 3) {
-                Text(title).fontWeight(.medium)
+                Text(tr(title)).fontWeight(.medium)
                 if let detail {
-                    Text(detail).font(.callout).foregroundStyle(.secondary)
+                    Text(tr(detail)).font(.callout).foregroundStyle(.secondary)
                 }
             }
             Spacer(minLength: 6)
@@ -275,7 +275,7 @@ private struct SettingsToggle<Accessory: View>: View {
     var body: some View {
         SettingsRow(title: title, detail: detail) {
             accessory
-            Toggle(title, isOn: binding).toggleStyle(.switch).labelsHidden()
+            Toggle(tr(title), isOn: binding).toggleStyle(.switch).labelsHidden()
         }
     }
 }
@@ -294,7 +294,7 @@ private struct SettingsMessage: View {
     let text: String
 
     var body: some View {
-        Label(text, systemImage: "exclamationmark.circle")
+        Label(tr(text), systemImage: "exclamationmark.circle")
             .font(.callout)
             .fixedSize(horizontal: false, vertical: true)
     }
@@ -308,7 +308,7 @@ struct LidSettings: View {
             SettingsHeader(title: "合盖保活", status: controller.state, symbol: "laptopcomputer") {
                 if let percent = controller.status.batteryPercent {
                     Label("\(percent)%", systemImage: controller.status.onBattery == true ? "battery.75percent" : "battery.100percent.bolt")
-                        .accessibilityLabel("电量 \(percent)%")
+                        .accessibilityLabel(tr("电量 %@%%", String(percent)))
                 }
             }
 
@@ -323,7 +323,7 @@ struct LidSettings: View {
                 SettingsDividingLine()
                 SettingsToggle(title: "低电量保护", detail: "低于设定电量时暂停保活。", binding: $controller.options.protectBattery) {
                     if controller.options.protectBattery {
-                        Picker("保护阈值", selection: $controller.options.minimumBattery) {
+                        Picker(tr("保护阈值"), selection: $controller.options.minimumBattery) {
                             ForEach([10, 15, 20, 25, 30, 40], id: \.self) { Text("\($0)%").tag($0) }
                         }
                         .labelsHidden()
@@ -342,26 +342,26 @@ struct LidSettings: View {
                 SettingsMessage(text: error)
             }
             if controller.canTakeOver {
-                Text("接管现有设置后，暂停、退出或移除电源组件时将恢复正常系统睡眠。")
+                Text(tr("接管现有设置后，暂停、退出或移除电源组件时将恢复正常系统睡眠。"))
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
             HStack(spacing: 10) {
                 if controller.needsRecovery {
-                    Button("恢复系统睡眠", action: controller.recover)
+                    Button(tr("恢复系统睡眠"), action: controller.recover)
                 } else if controller.canTakeOver {
-                    Button("接管并启用", action: controller.takeOver)
+                    Button(tr("接管并启用"), action: controller.takeOver)
                 } else if !controller.installed {
-                    Button("授权电源组件…", action: controller.installPower)
+                    Button(tr("授权电源组件…"), action: controller.installPower)
                 } else {
-                    Button("移除电源组件…", action: controller.removePower)
+                    Button(tr("移除电源组件…"), action: controller.removePower)
                 }
                 Spacer()
                 if controller.needsLoginApproval {
-                    Button("批准登录项…", action: controller.openLoginItems)
+                    Button(tr("批准登录项…"), action: controller.openLoginItems)
                 }
-                Button("锁定屏幕设置…", action: controller.openLockScreen)
+                Button(tr("锁定屏幕设置…"), action: controller.openLockScreen)
             }
         }
     }
@@ -370,17 +370,30 @@ struct LidSettings: View {
 struct FoldDaySettings: View {
     @ObservedObject var lid: LidController
     @ObservedObject var proximity: ProximityController
+    let languageChanged: () -> Void
+    @AppStorage(InterfaceLanguage.preference) private var language = InterfaceLanguage.system
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         VStack(spacing: 0) {
-            Picker("设置类别", selection: $lid.settingsTab) {
-                Label("合盖保活", systemImage: "laptopcomputer").tag(0)
-                Label("蓝牙锁屏", systemImage: "lock.shield").tag(1)
+            HStack(spacing: 12) {
+                Picker(tr("设置类别"), selection: $lid.settingsTab) {
+                    Label(tr("合盖保活"), systemImage: "laptopcomputer").tag(0)
+                    Label(tr("蓝牙锁屏"), systemImage: "lock.shield").tag(1)
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+
+                Picker(tr("界面语言"), selection: $language) {
+                    ForEach(InterfaceLanguage.allCases) { option in
+                        Text(option.label).tag(option)
+                    }
+                }
+                .labelsHidden()
+                .fixedSize()
+                .id(language)
             }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .frame(width: 268)
+            .padding(.horizontal, 21)
             .padding(.top, 15)
             ScrollView {
                 Group {
@@ -391,6 +404,7 @@ struct FoldDaySettings: View {
                     }
                 }
                 .padding(21)
+                .id(language)
             }
             .scrollBounceBehavior(.basedOnSize)
         }
@@ -398,6 +412,10 @@ struct FoldDaySettings: View {
         .tint(colorScheme == .dark
               ? Color(red: 0.34, green: 0.83, blue: 0.69)
               : Color(red: 0.04, green: 0.43, blue: 0.34))
+        .onChange(of: language) { _, _ in languageChanged() }
+        .onChange(of: lid.settingsTab) { _, tab in
+            if tab != 1 { proximity.setDiscovery(false) }
+        }
     }
 
     private var proximitySettings: some View {
@@ -409,11 +427,11 @@ struct FoldDaySettings: View {
             } else {
                 SettingsCard {
                     SettingsRow(title: "感应设备") {
-                        Button("添加蓝牙设备…") { proximity.setDiscovery(true) }
+                        Button(tr("添加蓝牙设备…")) { proximity.setDiscovery(true) }
                     }
                     SettingsDividingLine()
                     if proximity.devices.isEmpty {
-                        Text("尚未添加设备").foregroundStyle(.secondary)
+                        Text(tr("尚未添加设备")).foregroundStyle(.secondary)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(12)
                     } else {
@@ -423,14 +441,14 @@ struct FoldDaySettings: View {
                                     HStack {
                                         Label(device.name, systemImage: "antenna.radiowaves.left.and.right")
                                             .lineLimit(1)
-                                        Text(device.rssi.map { "\($0) dBm" } ?? "暂无信号")
+                                        Text(device.rssi.map { "\($0) dBm" } ?? tr("暂无信号"))
                                             .font(.callout)
                                             .foregroundStyle(.secondary)
                                             .monospacedDigit()
                                             .fixedSize()
                                         Spacer()
-                                        Button("移除") { proximity.removeDevice(device.id) }
-                                            .accessibilityLabel("移除\(device.name)")
+                                        Button(tr("移除")) { proximity.removeDevice(device.id) }
+                                            .accessibilityLabel(tr("移除%@", device.name))
                                     }
                                 }
                             }
@@ -463,13 +481,13 @@ struct FoldDaySettings: View {
 
                 if proximity.profile.options.unlockOnApproach || proximity.hasCredential {
                     HStack(spacing: 10) {
-                        Button(proximity.hasCredential ? "管理解锁密码…" : "设置解锁密码…", action: proximity.editPassword)
+                        Button(tr(proximity.hasCredential ? "管理解锁密码…" : "设置解锁密码…"), action: proximity.editPassword)
                         Spacer()
                         if proximity.profile.options.unlockOnApproach {
                             if !proximity.accessibilityAllowed {
-                                Button("授权辅助功能…", action: proximity.requestAccessibility)
+                                Button(tr("授权辅助功能…"), action: proximity.requestAccessibility)
                             } else {
-                                Label("辅助功能已授权", systemImage: "checkmark.circle").foregroundStyle(.secondary)
+                                Label(tr("辅助功能已授权"), systemImage: "checkmark.circle").foregroundStyle(.secondary)
                             }
                         }
                     }
@@ -480,7 +498,6 @@ struct FoldDaySettings: View {
             }
         }
         .onAppear(perform: proximity.refreshPermissions)
-        .onDisappear { proximity.setDiscovery(false) }
     }
 
     private var discoverySettings: some View {
@@ -489,7 +506,7 @@ struct FoldDaySettings: View {
                 SettingsRow(title: "附近设备", detail: "让要添加的设备保持可发现。") { EmptyView() }
                 SettingsDividingLine()
                 if proximity.discovered.isEmpty {
-                    Text("暂无可添加的设备")
+                    Text(tr("暂无可添加的设备"))
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, minHeight: 78, alignment: .leading)
                         .padding(.horizontal, 12)
@@ -503,8 +520,8 @@ struct FoldDaySettings: View {
                                     if let rssi = device.rssi {
                                         Text("\(rssi) dBm").monospacedDigit().foregroundStyle(.secondary)
                                     }
-                                    Button("添加") { proximity.addDevice(device.id) }
-                                        .accessibilityLabel("添加\(device.name)")
+                                    Button(tr("添加")) { proximity.addDevice(device.id) }
+                                        .accessibilityLabel(tr("添加%@", device.name))
                                 }
                             }
                         }
@@ -514,10 +531,10 @@ struct FoldDaySettings: View {
                 }
             }
             HStack {
-                Button("系统蓝牙设置…", action: proximity.openBluetoothSettings)
-                Button("蓝牙权限…", action: proximity.openBluetoothPermissions)
+                Button(tr("系统蓝牙设置…"), action: proximity.openBluetoothSettings)
+                Button(tr("蓝牙权限…"), action: proximity.openBluetoothPermissions)
                 Spacer()
-                Button("完成") { proximity.setDiscovery(false) }
+                Button(tr("完成")) { proximity.setDiscovery(false) }
                     .keyboardShortcut(.defaultAction)
             }
         }
@@ -531,9 +548,9 @@ struct FoldDaySettings: View {
     private func stepper(_ label: String, _ key: WritableKeyPath<ProximityOptions, Int>,
                          _ range: ClosedRange<Int>, _ unit: String) -> some View {
         Stepper(value: setting(key), in: range) {
-            Text("\(proximity.profile.options[keyPath: key]) \(unit)").monospacedDigit()
+            Text("\(proximity.profile.options[keyPath: key]) \(tr(unit))").monospacedDigit()
         }
-        .accessibilityLabel(label)
+        .accessibilityLabel(tr(label))
         .fixedSize()
     }
 }
@@ -543,6 +560,8 @@ final class LidAppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private let proximity = ProximityController()
     private var lidObservation: AnyCancellable?
     private var menuItem: NSStatusItem?
+    private var settingsMenuItem: NSMenuItem?
+    private var quitMenuItem: NSMenuItem?
     private var settingsWindow: NSWindow?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -550,14 +569,24 @@ final class LidAppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             .sink { [weak proximity] lidClosed in proximity?.setLidOpen(lidClosed == false) }
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         item.button?.image = NSImage(systemSymbolName: "laptopcomputer", accessibilityDescription: appName)
-        item.button?.toolTip = appName
         let menu = NSMenu()
-        menu.addItem(withTitle: "\(appName) 设置…", action: #selector(showSettings), keyEquivalent: ",").target = self
+        settingsMenuItem = menu.addItem(withTitle: "", action: #selector(showSettings), keyEquivalent: ",")
+        settingsMenuItem?.target = self
         menu.addItem(.separator())
-        menu.addItem(withTitle: "退出\(appName)", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        quitMenuItem = menu.addItem(withTitle: "", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         item.menu = menu
         menuItem = item
+        updateLocalizedTitles()
         if !UserDefaults.standard.bool(forKey: "hasOpenedSettings") { showSettings() }
+    }
+
+    private func updateLocalizedTitles() {
+        let name = appName
+        menuItem?.button?.toolTip = name
+        menuItem?.button?.setAccessibilityLabel(name)
+        settingsMenuItem?.title = tr("%@ 设置…", name)
+        quitMenuItem?.title = tr("退出%@", name)
+        settingsWindow?.title = tr("%@ 设置", name)
     }
 
     @objc private func showSettings() {
@@ -565,9 +594,11 @@ final class LidAppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         proximity.refreshPermissions()
         if settingsWindow == nil {
             let window = NSWindow(contentViewController: NSHostingController(
-                rootView: FoldDaySettings(lid: controller, proximity: proximity)
+                rootView: FoldDaySettings(lid: controller, proximity: proximity) { [weak self] in
+                    self?.updateLocalizedTitles()
+                    self?.proximity.refreshNames()
+                }
             ))
-            window.title = appName + " 设置"
             window.styleMask = [.titled, .closable]
             window.isReleasedWhenClosed = false
             window.hidesOnDeactivate = false
@@ -576,6 +607,7 @@ final class LidAppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             window.center()
             settingsWindow = window
         }
+        updateLocalizedTitles()
         UserDefaults.standard.set(true, forKey: "hasOpenedSettings")
         NSApp.activate(ignoringOtherApps: true)
         settingsWindow?.makeKeyAndOrderFront(nil)
@@ -595,9 +627,12 @@ final class LidAppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             try controller.shutdown()
             return .terminateNow
         } catch {
-            let alert = NSAlert(error: error)
-            alert.addButton(withTitle: "退出")
-            alert.addButton(withTitle: "返回设置")
+            let alert = NSAlert()
+            alert.alertStyle = .warning
+            alert.messageText = tr("未能恢复设置。")
+            alert.informativeText = tr(error.localizedDescription)
+            alert.addButton(withTitle: tr("退出"))
+            alert.addButton(withTitle: tr("返回设置"))
             NSApp.activate(ignoringOtherApps: true)
             if alert.runModal() == .alertFirstButtonReturn { return .terminateNow }
             showSettings()

@@ -10,31 +10,52 @@ app=$1
 contents=$app/Contents
 mkdir -p "$contents/MacOS" "$contents/Resources"
 
-arch=$(/usr/bin/uname -m)
-target="$arch-apple-macos14.0"
-/usr/bin/swiftc -warnings-as-errors -swift-version 5 -O -target "$target" \
-    "$source_dir/PowerControl.swift" "$source_dir/PowerHelper.swift" \
-    -o "$contents/Resources/lidawake-power"
-/usr/bin/swiftc -warnings-as-errors -swift-version 5 -O -target "$target" \
-    "$source_dir/PowerControl.swift" "$source_dir/MacHardware.swift" "$source_dir/ProximitySettings.swift" \
-    "$source_dir/ProximityEvidence.swift" "$source_dir/Proximity.swift" "$source_dir/FoldDay.swift" \
-    -o "$contents/MacOS/FoldDay"
+archs=($(/usr/bin/uname -m))
+if [[ "${FOLDDAY_UNIVERSAL:-0}" == 1 ]]; then
+    archs=(arm64 x86_64)
+fi
+stage=$(/usr/bin/mktemp -d "${TMPDIR:-/tmp}/foldday-build.XXXXXXXX")
+trap '/bin/rm -R -- "$stage"' EXIT
+helpers=()
+apps=()
+for arch in "${archs[@]}"; do
+    target="$arch-apple-macos14.0"
+    helpers+=("$stage/lidawake-power-$arch")
+    apps+=("$stage/FoldDay-$arch")
+    /usr/bin/swiftc -warnings-as-errors -swift-version 5 -O -target "$target" \
+        "$source_dir/PowerControl.swift" "$source_dir/PowerHelper.swift" \
+        -o "$stage/lidawake-power-$arch"
+    /usr/bin/swiftc -warnings-as-errors -swift-version 5 -O -target "$target" \
+        -import-objc-header "$source_dir/KeychainLookup.h" \
+        "$source_dir/PowerControl.swift" "$source_dir/MacHardware.swift" "$source_dir/ProximitySettings.swift" \
+        "$source_dir/ProximityEvidence.swift" "$source_dir/Proximity.swift" "$source_dir/Localization.swift" "$source_dir/FoldDay.swift" \
+        -o "$stage/FoldDay-$arch"
+done
+if (( ${#archs[@]} > 1 )); then
+    /usr/bin/lipo -create "${helpers[@]}" -output "$contents/Resources/lidawake-power"
+    /usr/bin/lipo -create "${apps[@]}" -output "$contents/MacOS/FoldDay"
+else
+    /bin/cp "${helpers[1]}" "$contents/Resources/lidawake-power"
+    /bin/cp "${apps[1]}" "$contents/MacOS/FoldDay"
+fi
 /bin/cp "$source_dir/LICENSE-BLEUnlock" "$contents/Resources/LICENSE-BLEUnlock"
+/bin/cp -R "$source_dir/Resources/en.lproj" "$source_dir/Resources/zh-Hans.lproj" "$contents/Resources/"
 
 /usr/bin/printf '%s\n' '<?xml version="1.0" encoding="UTF-8"?>' \
     '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">' \
     '<plist version="1.0"><dict>' \
     '<key>CFBundleIdentifier</key><string>local.lidawake</string>' \
     '<key>CFBundleExecutable</key><string>FoldDay</string>' \
+    '<key>CFBundleDevelopmentRegion</key><string>en</string>' \
     '<key>CFBundleName</key><string>FoldDay</string>' \
-    '<key>CFBundleDisplayName</key><string>折昼</string>' \
+    '<key>CFBundleDisplayName</key><string>FoldDay</string>' \
     '<key>CFBundlePackageType</key><string>APPL</string>' \
-    '<key>CFBundleShortVersionString</key><string>1.2.2</string>' \
-    '<key>CFBundleVersion</key><string>6</string>' \
+    '<key>CFBundleShortVersionString</key><string>1.3.0</string>' \
+    '<key>CFBundleVersion</key><string>7</string>' \
     '<key>LSMinimumSystemVersion</key><string>14.0</string>' \
     '<key>LSUIElement</key><true/>' \
     '<key>NSHighResolutionCapable</key><true/>' \
-    '<key>NSBluetoothAlwaysUsageDescription</key><string>折昼搜索附近的低功耗蓝牙设备，并使用你添加的设备信号判断靠近和离开。</string>' \
+    '<key>NSBluetoothAlwaysUsageDescription</key><string>FoldDay uses Bluetooth LE signals from your selected devices to detect proximity.</string>' \
     '</dict></plist>' > "$contents/Info.plist"
 
 /usr/bin/codesign --force --sign - --identifier local.lidawake.power "$contents/Resources/lidawake-power"
