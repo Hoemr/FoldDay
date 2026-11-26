@@ -476,7 +476,7 @@ struct FoldDaySettings: View {
                     SettingsDividingLine()
                     SettingsToggle(title: "设备在旁时保持亮屏", detail: "抑制当前桌面的闲置显示休眠。", binding: setting(\.keepDisplayAwake))
                     SettingsDividingLine()
-                    SettingsToggle(title: "靠近时先唤醒屏幕", detail: "屏幕休眠时先唤醒，再尝试解锁。", binding: setting(\.wakeDisplay))
+                    SettingsToggle(title: "靠近时唤醒屏幕", detail: "息屏时用附近设备唤醒屏幕。", binding: setting(\.wakeDisplay))
                 }
 
                 if proximity.profile.options.unlockOnApproach || proximity.hasCredential {

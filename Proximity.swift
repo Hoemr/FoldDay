@@ -39,7 +39,7 @@ final class ProximityController: NSObject, ObservableObject, CBCentralManagerDel
     private var lidOpen = false
     private var systemSleeping = false
     private var displaySleeping = false
-    private var pendingUnlock = false
+    private var pendingUnlock: DispatchWorkItem?
     private var editingPassword = false
 
     override init() {
@@ -163,7 +163,7 @@ final class ProximityController: NSObject, ObservableObject, CBCentralManagerDel
         guard ScreenSession.isLocked == false else { return }
         error = nil
         editingPassword = true
-        pendingUnlock = false
+        cancelPendingUnlock()
         defer { editingPassword = false }
 
         let field = NSSecureTextField(frame: NSRect(x: 0, y: 0, width: 270, height: 24))
@@ -232,11 +232,8 @@ final class ProximityController: NSObject, ObservableObject, CBCentralManagerDel
         signalExpiry = nil
         evidence.removeAll()
         nearbyIDs.removeAll()
-        pendingUnlock = false
-        if displayWakeAssertion != 0 {
-            IOPMAssertionRelease(displayWakeAssertion)
-            displayWakeAssertion = 0
-        }
+        cancelPendingUnlock()
+        releaseDisplayWakeAssertion()
         if nearby { nearby = false }
         updateDeviceSignals()
         updateDisplayAssertion()
@@ -293,7 +290,7 @@ final class ProximityController: NSObject, ObservableObject, CBCentralManagerDel
         if profile.options.useConnectedRSSI, peripherals[peripheral.identifier] == nil {
             track(peripheral, with: manager)
         }
-        if peripheral.state != .connected || !profile.options.useConnectedRSSI {
+        if displaySleeping || peripheral.state != .connected || !profile.options.useConnectedRSSI {
             observe(peripheral.identifier, rssi: RSSI.intValue)
         }
     }
@@ -390,19 +387,17 @@ final class ProximityController: NSObject, ObservableObject, CBCentralManagerDel
         if status != display { status = display }
         updateDisplayAssertion()
         guard !editingPassword, let locked = ScreenSession.isLocked else { return }
-        let readings = tracked.map { evidence[$0] ?? ProximityEvidence() }
-        let stableNear = options.unlockRequiresAll
-            ? readings.allSatisfy { $0.isStablyClose(now: now) }
-            : readings.contains { $0.isStablyClose(now: now) }
-        if stableNear {
+        if hasFreshNearbyDevice(at: now) {
             session.sawNearby()
-            if locked && options.unlockOnApproach && accessibilityAllowed && hasCredential &&
-               session.consumeApproach() {
-                beginUnlock()
+            if displaySleeping {
+                wakeDisplayIfEnabled()
+            } else if locked {
+                scheduleUnlock()
             }
             return
         }
         guard !near else { return }
+        let readings = tracked.map { evidence[$0] ?? ProximityEvidence() }
         let idle = CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: .init(rawValue: UInt32.max)!)
         guard AutomaticLockSafety.reason(evidence: readings, requireAllAway: options.lockRequiresAll,
                                          now: now, idleSeconds: locked ? delay : idle,
@@ -425,39 +420,58 @@ final class ProximityController: NSObject, ObservableObject, CBCentralManagerDel
                                 profile.options.keepDisplayAwake && ScreenSession.isLocked == false)
     }
 
-    private func beginUnlock() {
-        if displaySleeping {
-            guard profile.options.wakeDisplay else { return }
-            pendingUnlock = IOPMAssertionDeclareUserActivity("FoldDay: device returned" as CFString,
-                kIOPMUserActiveLocal, &displayWakeAssertion) == kIOReturnSuccess
+    private func hasFreshNearbyDevice(at now: TimeInterval) -> Bool {
+        let close = profile.devices.map { evidence[$0]?.isStablyClose(now: now) == true }
+        guard !close.isEmpty else { return false }
+        return profile.options.unlockRequiresAll ? close.allSatisfy { $0 } : close.contains(true)
+    }
+
+    private func wakeDisplayIfEnabled() {
+        guard profile.options.wakeDisplay, session.requestDisplayWake() else { return }
+        let result = IOPMAssertionDeclareUserActivity("FoldDay: nearby Bluetooth device" as CFString,
+            kIOPMUserActiveLocal, &displayWakeAssertion)
+        if result == kIOReturnSuccess {
+            log.notice("Requested display wake after fresh nearby Bluetooth readings")
         } else {
-            pendingUnlock = true
-            submitUnlockWhenReady()
+            error = "macOS 未接受蓝牙唤醒屏幕请求。"
+            log.error("Display wake request failed: \(result)")
         }
     }
 
-    private func submitUnlockWhenReady() {
-        guard pendingUnlock else { return }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
-            guard let self, self.pendingUnlock else { return }
-            self.pendingUnlock = false
-            let now = ProcessInfo.processInfo.systemUptime
-            let profile = self.profile
+    private func releaseDisplayWakeAssertion() {
+        guard displayWakeAssertion != 0 else { return }
+        IOPMAssertionRelease(displayWakeAssertion)
+        displayWakeAssertion = 0
+    }
+
+    private func cancelPendingUnlock() {
+        pendingUnlock?.cancel()
+        pendingUnlock = nil
+    }
+
+    private func scheduleUnlock() {
+        guard pendingUnlock == nil, session.canAttemptUnlock, profile.options.unlockOnApproach,
+              accessibilityAllowed, hasCredential else { return }
+        let work = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            self.pendingUnlock = nil
             guard self.monitoringEnabled, self.central?.state == .poweredOn, self.lidOpen,
-                  !self.editingPassword, !self.displaySleeping, profile.options.unlockOnApproach,
-                  ScreenSession.isLocked == true else { return }
-            let close = profile.devices.map { self.evidence[$0]?.isStablyClose(now: now) == true }
-            guard profile.options.unlockRequiresAll ? close.allSatisfy({ $0 }) : close.contains(true),
-                  AXIsProcessTrusted(), CGPreflightPostEventAccess() else { return }
+                  !self.editingPassword, !self.displaySleeping, self.profile.options.unlockOnApproach,
+                  self.hasFreshNearbyDevice(at: ProcessInfo.processInfo.systemUptime),
+                  AXIsProcessTrusted(), CGPreflightPostEventAccess(),
+                  ScreenSession.isLocked == true, self.session.consumeUnlockAttempt() else { return }
             guard let secret = UnlockCredential.read(),
                   let password = String(data: secret, encoding: .utf8), !password.isEmpty else {
                 self.error = "无法读取钥匙串中的解锁密码。请在设置中重新保存。"
+                self.log.error("Unlock credential is unavailable in the login keychain")
                 return
             }
             guard ScreenSession.isLocked == true else { return }
             ScreenSession.submit(password)
-            self.log.notice("Submitted an unlock attempt after a new approach")
+            self.log.notice("Submitted one unlock attempt after fresh nearby Bluetooth readings")
         }
+        pendingUnlock = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: work)
     }
 
     func refreshNames() {
@@ -496,20 +510,26 @@ final class ProximityController: NSObject, ObservableObject, CBCentralManagerDel
     }
 
     @objc private func displayDidSleep() {
+        guard !displaySleeping else { return }
         displaySleeping = true
-        updateDisplayAssertion()
+        if ScreenSession.isLocked == false { session.displaySleptWhileUnlocked() }
+        // Require measurements gathered after display sleep, including when the phone did not leave.
+        resetEvidence()
+        if monitoringEnabled { log.notice("Display slept; waiting for fresh Bluetooth readings") }
     }
 
     @objc private func displayDidWake() {
         displaySleeping = false
-        updateDisplayAssertion()
-        submitUnlockWhenReady()
+        releaseDisplayWakeAssertion()
+        if ScreenSession.isLocked == true { session.displayWokeWhileLocked() }
+        updatePresence(ProcessInfo.processInfo.systemUptime)
     }
 
     @objc private func screenDidLock() { updateDisplayAssertion() }
 
     @objc private func screenDidUnlock() {
-        pendingUnlock = false
+        cancelPendingUnlock()
+        releaseDisplayWakeAssertion()
         session.unlocked(nearby: nearby)
         updateDisplayAssertion()
     }

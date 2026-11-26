@@ -40,13 +40,26 @@ struct ProximityProfile: Codable, Equatable {
     }
 }
 
-/// A new approach can unlock only after this process has measured a departure.
 struct ProximitySession {
     private(set) var wasNearby = false
-    private(set) var mayUnlock = false
+    private var mayUnlock = false
+    private var requestedWake = false
+    private var submittedUnlock = false
+
+    var canAttemptUnlock: Bool { mayUnlock && !submittedUnlock }
 
     mutating func sawNearby() { wasNearby = true }
     mutating func sawAwayWhileLocked() { mayUnlock = true }
+    mutating func displayWokeWhileLocked() { mayUnlock = true }
+
+    mutating func requestDisplayWake() -> Bool {
+        guard !requestedWake else { return false }
+        requestedWake = true
+        return true
+    }
+
+    mutating func displaySleptWhileUnlocked() { requestedWake = false }
+
     mutating func requestedLock(accepted: Bool) {
         wasNearby = false
         mayUnlock = accepted
@@ -54,11 +67,13 @@ struct ProximitySession {
     mutating func unlocked(nearby: Bool) {
         wasNearby = nearby
         mayUnlock = false
+        requestedWake = false
+        submittedUnlock = false
     }
 
-    mutating func consumeApproach() -> Bool {
-        guard mayUnlock else { return false }
-        mayUnlock = false
+    mutating func consumeUnlockAttempt() -> Bool {
+        guard canAttemptUnlock else { return false }
+        submittedUnlock = true
         return true
     }
 }

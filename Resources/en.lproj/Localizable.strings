@@ -73,8 +73,8 @@
 "秒" = "sec";
 "设备在旁时保持亮屏" = "Keep Display Awake Nearby";
 "抑制当前桌面的闲置显示休眠。" = "Prevent the display from sleeping while idle.";
-"靠近时先唤醒屏幕" = "Wake Display on Approach";
-"屏幕休眠时先唤醒，再尝试解锁。" = "Wake the display before attempting to unlock.";
+"靠近时唤醒屏幕" = "Wake Display on Approach";
+"息屏时用附近设备唤醒屏幕。" = "Wake a sleeping display when a device is nearby.";
 "管理解锁密码…" = "Manage Unlock Password…";
 "设置解锁密码…" = "Set Unlock Password…";
 "授权辅助功能…" = "Grant Accessibility Access…";
@@ -113,4 +113,5 @@
 "正在测量设备距离" = "Estimating device proximity";
 "等待有效蓝牙信号" = "Waiting for a Bluetooth signal";
 "macOS 未接受自动锁屏请求。" = "macOS did not accept the automatic lock request.";
+"macOS 未接受蓝牙唤醒屏幕请求。" = "macOS did not accept the Bluetooth display wake request.";
 "蓝牙设备 %@" = "Bluetooth device %@";

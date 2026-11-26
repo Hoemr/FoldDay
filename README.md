@@ -57,6 +57,8 @@ Open FoldDay and choose **FoldDay Settings…** from its menu bar icon. The **La
 2. For auto-unlock, use **Set Unlock Password…** and grant Accessibility access. FoldDay stores the password in your local Keychain.
 3. Enable proximity sensing, confirm that the device is detected, then test leaving and returning. Each device displays its own signal strength.
 
+With **Wake Display on Approach** enabled, fresh readings from a selected device can wake the display even if the device stayed nearby. If the screen is locked, FoldDay checks for a nearby device before attempting to unlock it.
+
 ## Compatibility
 
 FoldDay uses macOS power settings for clamshell keep-awake and the private `DisplayServices` interface for brightness. Closed-lid GUI availability depends on your MacBook, macOS version, and screen-lock policy. Test your setup on battery and without an external display before relying on it.
